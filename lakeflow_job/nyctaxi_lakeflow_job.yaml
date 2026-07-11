@@ -1,0 +1,74 @@
+resources:
+  jobs:
+    nyctaxi_lakeflow_job:
+      name: nyctaxi_lakeflow_job
+      tasks:
+        - task_key: 00_ingest_lookup_file
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/00_landing/ingest_taxi_zone_lookup
+            source: WORKSPACE
+        - task_key: 00_ingest_yellow_taxi_trips_file
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/00_landing/ingest_yellow_taxi_trips_file
+            source: WORKSPACE
+        - task_key: continue_after_yellow_taxi_rides_file
+          depends_on:
+            - task_key: 00_ingest_yellow_taxi_trips_file
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.00_ingest_yellow_taxi_trips_file.values.yellow_taxi_file_fetched\
+              }}"
+            right: yes
+        - task_key: 01_yellow_taxi_bronze
+          depends_on:
+            - task_key: continue_after_yellow_taxi_rides_file
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/01_bronze/yellow_taxi_trips_bronze
+            source: WORKSPACE
+        - task_key: 02_yellow_taxi_silver_cleansed
+          depends_on:
+            - task_key: 01_yellow_taxi_bronze
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/02_silver/yellow_taxi_trips_cleansed_silver
+            source: WORKSPACE
+        - task_key: 02_yellow_taxi_silver_enriched
+          depends_on:
+            - task_key: 02_yellow_taxi_silver_cleansed
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/02_silver/yellow_taxi_trips_enriched_silver
+            source: WORKSPACE
+        - task_key: continue_after_zone_file
+          depends_on:
+            - task_key: 00_ingest_lookup_file
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.00_ingest_lookup_file.values.taxi_zone_file_fetched}}"
+            right: yes
+        - task_key: 02_taxi_zone_lookup
+          depends_on:
+            - task_key: continue_after_zone_file
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/02_silver/taxi_zone_lookup_silver
+            source: WORKSPACE
+        - task_key: tests
+          depends_on:
+            - task_key: 02_yellow_taxi_silver_enriched
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/tests/tests
+            source: WORKSPACE
+        - task_key: 03_trips_summaries
+          depends_on:
+            - task_key: 02_taxi_zone_lookup
+            - task_key: tests
+          notebook_task:
+            notebook_path: /Workspace/Users/email@gmail.com/nyctaxi_databricks/transformations/03_gold/yellow_taxi_trip_summaries
+            source: WORKSPACE
+      git_source:
+        git_url: https://github.com/UsmanBadar/nyctaxi_databricks
+        git_provider: gitHub
+        git_branch: main
+      queue:
+        enabled: true
+      performance_target: PERFORMANCE_OPTIMIZED
